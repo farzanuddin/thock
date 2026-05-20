@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: #0d0b12;
+    color: theme("colors.foreground");
+    font-family: theme("fontFamily.mono");
+  }
+}
+
+@layer components {
+  .typing-caret {
+    display: inline-block;
+    width: 2px;
+    height: 1.1em;
+    margin: 0 -1px;
+    transform: translateY(0.16em);
+    background: theme("colors.primary");
+    animation: blink 1s steps(2, jump-none) infinite;
+  }
+
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+}
