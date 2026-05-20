@@ -1,4 +1,28 @@
-import { Keyboard, MousePointer2, RotateCcw, Volume2, VolumeX } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Command,
+  FastForward,
+  Frame,
+  Keyboard,
+  LayoutDashboard,
+  Lightbulb,
+  Mic,
+  Moon,
+  MousePointer2,
+  RotateCcw,
+  Search,
+  SkipBack,
+  SkipForward,
+  Sun,
+  SunDim,
+  Volume1,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "./components/Button";
 import { getQuote } from "./lib/quotes";
@@ -10,21 +34,21 @@ const TEST_SECONDS = 30;
 const KEY_ROWS = [
   [
     { label: "esc", code: "Escape", tone: "accent" },
-    { label: "F1", code: "F1", top: "☼" },
-    { label: "F2", code: "F2", top: "☀" },
-    { label: "F3", code: "F3", top: "⌘" },
-    { label: "F4", code: "F4", top: "⌕" },
-    { label: "F5", code: "F5", top: "♬", tone: "dark" },
-    { label: "F6", code: "F6", top: "☾", tone: "dark" },
-    { label: "F7", code: "F7", top: "◁", tone: "dark" },
-    { label: "F8", code: "F8", top: "▷", tone: "dark" },
-    { label: "F9", code: "F9", top: "▷▷", tone: "dark" },
-    { label: "F10", code: "F10", top: "◐" },
-    { label: "F11", code: "F11", top: "◑" },
-    { label: "F12", code: "F12", top: "◒" },
-    { label: "#", code: "F13", tone: "dark" },
+    { label: "F1", code: "F1", icon: SunDim },
+    { label: "F2", code: "F2", icon: Sun },
+    { label: "F3", code: "F3", icon: LayoutDashboard },
+    { label: "F4", code: "F4", icon: Search },
+    { label: "F5", code: "F5", icon: Mic, tone: "dark" },
+    { label: "F6", code: "F6", icon: Moon, tone: "dark" },
+    { label: "F7", code: "F7", icon: SkipBack, tone: "dark" },
+    { label: "F8", code: "F8", icon: SkipForward, tone: "dark" },
+    { label: "F9", code: "F9", icon: FastForward, tone: "dark" },
+    { label: "F10", code: "F10", icon: VolumeX },
+    { label: "F11", code: "F11", icon: Volume1 },
+    { label: "F12", code: "F12", icon: Volume2 },
+    { label: "", code: "F13", icon: Frame, tone: "dark" },
     { label: "del", code: "Delete", tone: "dark" },
-    { label: "☼", code: "F14", tone: "dark" },
+    { label: "", code: "F14", icon: Lightbulb, tone: "dark" },
   ],
   [
     { label: "`", code: "Backquote", top: "~" },
@@ -40,7 +64,7 @@ const KEY_ROWS = [
     { label: "0", code: "Digit0", top: ")" },
     { label: "-", code: "Minus", top: "_" },
     { label: "=", code: "Equal", top: "+" },
-    { label: "←", code: "Backspace", width: 100, tone: "dark" },
+    { label: "", code: "Backspace", icon: ArrowLeft, width: 100, tone: "dark" },
     { label: "pgup", code: "PageUp", width: 50, tone: "dark" },
   ],
   [
@@ -75,20 +99,20 @@ const KEY_ROWS = [
     { label: ".", code: "Period", top: ">" },
     { label: "/", code: "Slash", top: "?" },
     { label: "shift", code: "ShiftRight", width: 77, tone: "dark" },
-    { label: "^", code: "ArrowUp", width: 50 },
+    { label: "", code: "ArrowUp", icon: ChevronUp, width: 50 },
     { label: "end", code: "End", width: 50, tone: "dark" },
   ],
   [
     { label: "ctrl", code: "ControlLeft", width: 62, tone: "dark" },
     { label: "option", code: "AltLeft", width: 62, tone: "dark" },
-    { label: "⌘", code: "MetaLeft", width: 62, tone: "dark" },
+    { label: "", code: "MetaLeft", icon: Command, width: 62, tone: "dark" },
     { label: "", code: "Space", width: 314 },
-    { label: "⌘", code: "MetaRight", width: 50, tone: "dark" },
+    { label: "", code: "MetaRight", icon: Command, width: 50, tone: "dark" },
     { label: "fn", code: "Fn", width: 50, tone: "dark" },
     { label: "ctrl", code: "ControlRight", width: 50, tone: "dark" },
-    { label: "‹", code: "ArrowLeft", width: 50 },
-    { label: "∨", code: "ArrowDown", width: 50 },
-    { label: "›", code: "ArrowRight", width: 50 },
+    { label: "", code: "ArrowLeft", icon: ChevronLeft, width: 50 },
+    { label: "", code: "ArrowDown", icon: ChevronDown, width: 50 },
+    { label: "", code: "ArrowRight", icon: ChevronRight, width: 50 },
   ],
 ];
 
@@ -525,6 +549,30 @@ function ResultCard({ label, value }) {
 }
 
 function SimpleKeyboard({ activeKey }) {
+  const [pointerKey, setPointerKey] = useState(null);
+  const pressedKey = pointerKey ?? activeKey;
+
+  const pressPointerKey = useCallback((event, code) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!code) return;
+    setPointerKey(code);
+    playKeyboardSound(code, "down", 0.5);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture is best-effort; the key still works without it.
+    }
+  }, []);
+
+  const releasePointerKey = useCallback((event, code) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!code) return;
+    setPointerKey(null);
+    playKeyboardSound(code, "up", 0.5);
+  }, []);
+
   return (
     <section
       className="mx-auto hidden w-fit max-w-full shrink-0 scale-[0.82] rounded-xl border border-[#55515d] bg-[#4a4850] p-3 shadow-[0_0_0_1px_rgba(255,255,255,0.08)] lg:grid"
@@ -536,12 +584,20 @@ function SimpleKeyboard({ activeKey }) {
             <div className="flex" key={`row-${rowIndex}`}>
               {row.map((key, keyIndex) => (
                 <Key
-                  active={activeKey === (key.code ?? key.label.toLowerCase())}
+                  active={pressedKey === key.code}
+                  code={key.code}
                   key={`${key.label}-${keyIndex}`}
+                  onPointerDown={pressPointerKey}
+                  onPointerRelease={releasePointerKey}
                   tone={key.tone}
                   width={key.width}
                 >
-                  {key.top ? (
+                  {key.icon ? (
+                    <>
+                      <key.icon size={11} strokeWidth={2.2} />
+                      {key.label && <span>{key.label}</span>}
+                    </>
+                  ) : key.top ? (
                     <>
                       <span>{key.top}</span>
                       <span>{key.label}</span>
@@ -559,13 +615,27 @@ function SimpleKeyboard({ activeKey }) {
   );
 }
 
-function Key({ active, children, tone, width = 50 }) {
+function Key({
+  active,
+  children,
+  code,
+  onPointerDown,
+  onPointerRelease,
+  tone,
+  width = 50,
+}) {
   const variant = getKeyVariant(tone);
   return (
     <button
       aria-label={typeof children === "string" ? children : undefined}
-      className="flex cursor-default touch-none appearance-none items-end border-0 bg-transparent p-0 text-left focus:outline-none"
+      className="flex cursor-pointer touch-none appearance-none items-end border-0 bg-transparent p-0 text-left focus:outline-none"
       style={{ height: 50, width }}
+      onPointerCancel={(event) => onPointerRelease(event, code)}
+      onPointerDown={(event) => onPointerDown(event, code)}
+      onPointerLeave={(event) => {
+        if (active) onPointerRelease(event, code);
+      }}
+      onPointerUp={(event) => onPointerRelease(event, code)}
       tabIndex={-1}
       type="button"
     >
