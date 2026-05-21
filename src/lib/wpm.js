@@ -20,7 +20,7 @@ export function countTyping({
     const input = inputWords[i] || "";
     if (!target) break;
 
-    if (input === target) {
+    if (wordsEqual(input, target)) {
       correctWordChars += target.length;
       allCorrectChars += target.length;
       if (i < inputWords.length - 1) correctSpaces += 1;
@@ -30,7 +30,7 @@ export function countTyping({
     for (let c = 0; c < input.length; c += 1) {
       if (c >= target.length) {
         extraChars += 1;
-      } else if (input[c] === target[c]) {
+      } else if (charsEqual(input[c], target[c])) {
         allCorrectChars += 1;
       } else {
         incorrectChars += 1;
@@ -41,7 +41,7 @@ export function countTyping({
       const missed = target.length - input.length;
       let currentWordIncorrect = 0;
       for (let c = 0; c < input.length; c += 1) {
-        if (input[c] !== target[c]) currentWordIncorrect += 1;
+        if (!charsEqual(input[c], target[c])) currentWordIncorrect += 1;
       }
       if (final || i < inputWords.length - 1) {
         missedChars += missed;
@@ -75,4 +75,22 @@ export function countTyping({
 
 export function getWpm(numerator, elapsedSeconds) {
   return Math.round(numerator / 5 / Math.max(elapsedSeconds / 60, 1 / 60));
+}
+
+function charsEqual(actual, expected) {
+  return normalizeChar(actual) === normalizeChar(expected);
+}
+
+function wordsEqual(actual, expected) {
+  if (actual.length !== expected.length) return false;
+  for (let i = 0; i < actual.length; i += 1) {
+    if (!charsEqual(actual[i], expected[i])) return false;
+  }
+  return true;
+}
+
+function normalizeChar(char) {
+  if (char === "’" || char === "‘") return "'";
+  if (char === "“" || char === "”") return '"';
+  return char;
 }

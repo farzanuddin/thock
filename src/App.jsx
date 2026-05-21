@@ -200,21 +200,27 @@ export default function App() {
     }, 250);
   }, [finishTest]);
 
-  const pressKey = useCallback((code) => {
-    if (!code) return;
-    setActiveKey(code);
-    if (audioEnabled) {
-      playKeyboardSound(code, "down", 0.5);
-    }
-  }, [audioEnabled]);
+  const pressKey = useCallback(
+    (code) => {
+      if (!code) return;
+      setActiveKey(code);
+      if (audioEnabled) {
+        playKeyboardSound(code, "down", 0.5);
+      }
+    },
+    [audioEnabled],
+  );
 
-  const releaseKey = useCallback((code) => {
-    if (!code) return;
-    setActiveKey((current) => (current === code ? null : current));
-    if (audioEnabled) {
-      playKeyboardSound(code, "up", 0.5);
-    }
-  }, [audioEnabled]);
+  const releaseKey = useCallback(
+    (code) => {
+      if (!code) return;
+      setActiveKey((current) => (current === code ? null : current));
+      if (audioEnabled) {
+        playKeyboardSound(code, "up", 0.5);
+      }
+    },
+    [audioEnabled],
+  );
 
   const handleKeyDown = useCallback(
     (event) => {
@@ -347,8 +353,8 @@ export default function App() {
   }, [counts, startTime, started, totalKeystrokes]);
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden px-5 py-5 sm:px-10 lg:px-20">
-      <header className="mx-auto flex w-full max-w-7xl items-center justify-between">
+    <main className="flex h-screen flex-col overflow-hidden px-5 py-5">
+      <header className="mx-auto flex w-full max-w-5xl items-center justify-between">
         <Button
           className="gap-2 px-0 text-2xl font-bold tracking-[-0.03em] text-primary hover:bg-transparent hover:text-primary"
           variant="ghost"
@@ -378,7 +384,6 @@ export default function App() {
             focused={focused}
             handleKeyDown={handleKeyDown}
             inputRef={inputRef}
-            resetTest={resetTest}
             setFocused={setFocused}
             started={started}
             timeLeft={timeLeft}
@@ -407,7 +412,6 @@ function TypingSurface({
   focused,
   handleKeyDown,
   inputRef,
-  resetTest,
   setFocused,
   started,
   timeLeft,
@@ -417,6 +421,25 @@ function TypingSurface({
   words,
   wpm,
 }) {
+  const activeWordRef = useRef(null);
+  const wordsContainerRef = useRef(null);
+  const [rowOffset, setRowOffset] = useState(0);
+
+  useEffect(() => {
+    if (!(activeWordRef.current && wordsContainerRef.current)) {
+      setRowOffset(0);
+      return;
+    }
+
+    const container = wordsContainerRef.current;
+    const activeWord = activeWordRef.current;
+    const lineHeight = Number.parseFloat(
+      window.getComputedStyle(container).lineHeight,
+    );
+    const row = Math.round(activeWord.offsetTop / lineHeight);
+    setRowOffset(Math.max(0, row - 1) * lineHeight);
+  }, [typed, wordIndex, words]);
+
   return (
     <div className="w-full">
       <div
@@ -426,7 +449,7 @@ function TypingSurface({
         )}
       />
 
-      <div className="mb-3 flex min-h-8 justify-end gap-6 text-sm text-muted">
+      <div className="mb-5 flex min-h-8 justify-end gap-6 text-muted">
         {started && (
           <>
             <Stat label="s" value={timeLeft} />
@@ -464,38 +487,44 @@ function TypingSurface({
             "h-40 overflow-hidden text-center text-[1.55rem] leading-[1.75] text-muted outline-none transition duration-200 sm:text-[1.8rem]",
             !started && !focused && "blur-sm opacity-30",
           )}
+          ref={wordsContainerRef}
         >
-          {words.map((word, index) => {
-            const input = index === wordIndex ? typed : wordInputs[index] || "";
-            return (
-              <span
-                className="mr-4 inline-block whitespace-nowrap"
-                key={`${word}-${index}`}
-              >
-                {renderWord(word, input, index === wordIndex && started)}
-              </span>
-            );
-          })}
+          <div
+            className="transition-transform duration-200 ease-out"
+            style={{ transform: `translateY(-${rowOffset}px)` }}
+          >
+            {words.map((word, index) => {
+              const input =
+                index === wordIndex ? typed : wordInputs[index] || "";
+              const isPast = index < wordIndex;
+              return (
+                <span
+                  className={cn(
+                    "relative mr-4 inline-block whitespace-nowrap",
+                    isPast &&
+                      input &&
+                      !wordsEqual(input, word) &&
+                      "after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:rounded-full after:bg-red-500/55",
+                  )}
+                  key={`${word}-${index}`}
+                  ref={index === wordIndex ? activeWordRef : undefined}
+                >
+                  {renderWord(word, input, index === wordIndex && started)}
+                </span>
+              );
+            })}
+          </div>
         </div>
         <p className="mt-2 text-center text-sm text-muted/70">- {author}</p>
       </div>
 
-      <div className="mt-5 grid place-items-center gap-4 text-muted">
-        <Button
-          aria-label="Restart"
-          className="text-muted hover:text-foreground"
-          size="icon"
-          variant="ghost"
-          onClick={() => resetTest()}
-        >
-          <RotateCcw size={24} />
-        </Button>
-        <div className="flex items-center gap-3 text-sm">
-          <kbd className="rounded-md bg-surface px-2 py-1 text-foreground/60">
+      <div className="mt-5 grid place-items-center gap-4 text-muted/45">
+        <div className="flex items-center gap-3 text-sm text-muted/45">
+          <kbd className="rounded-md bg-surface/20 px-2 py-1 text-surface">
             tab
           </kbd>
           <span>+</span>
-          <kbd className="rounded-md bg-surface px-2 py-1 text-foreground/60">
+          <kbd className="rounded-md bg-surface/20 px-2 py-1 text-surface">
             enter
           </kbd>
           <span>restart</span>
@@ -508,8 +537,8 @@ function TypingSurface({
 function Stat({ label, value }) {
   return (
     <span className="tabular-nums">
-      <strong className="text-xl text-foreground">{value}</strong>
-      <span className="ml-1 text-xs">{label}</span>
+      <strong className="font-bold text-surface">{value}</strong>
+      <span className="ml-1 text-muted">{label}</span>
     </span>
   );
 }
@@ -575,40 +604,42 @@ function SimpleKeyboard({ activeKey }) {
 
   return (
     <section
-      className="mx-auto hidden w-fit max-w-full shrink-0 scale-[0.82] rounded-xl border border-[#55515d] bg-[#4a4850] p-3 shadow-[0_0_0_1px_rgba(255,255,255,0.08)] lg:grid"
+      className="mx-auto hidden h-[245px] shrink-0 overflow-visible lg:block"
       aria-hidden="true"
     >
-      <div className="h-[278px] rounded-[5px] rounded-t-lg border border-zinc-500 bg-zinc-700">
-        <div className="-translate-y-1 -space-y-1 overflow-hidden rounded-[5px]">
-          {KEY_ROWS.map((row, rowIndex) => (
-            <div className="flex" key={`row-${rowIndex}`}>
-              {row.map((key, keyIndex) => (
-                <Key
-                  active={pressedKey === key.code}
-                  code={key.code}
-                  key={`${key.label}-${keyIndex}`}
-                  onPointerDown={pressPointerKey}
-                  onPointerRelease={releasePointerKey}
-                  tone={key.tone}
-                  width={key.width}
-                >
-                  {key.icon ? (
-                    <>
-                      <key.icon size={11} strokeWidth={2.2} />
-                      {key.label && <span>{key.label}</span>}
-                    </>
-                  ) : key.top ? (
-                    <>
-                      <span>{key.top}</span>
-                      <span>{key.label}</span>
-                    </>
-                  ) : (
-                    key.label || " "
-                  )}
-                </Key>
-              ))}
-            </div>
-          ))}
+      <div className="origin-top scale-[0.82] rounded-xl border border-[#55515d] bg-[#4a4850] p-3 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
+        <div className="h-[278px] rounded-[5px] rounded-t-lg border border-zinc-500 bg-zinc-700">
+          <div className="-translate-y-1 -space-y-1 overflow-hidden rounded-[5px]">
+            {KEY_ROWS.map((row, rowIndex) => (
+              <div className="flex" key={`row-${rowIndex}`}>
+                {row.map((key, keyIndex) => (
+                  <Key
+                    active={pressedKey === key.code}
+                    code={key.code}
+                    key={`${key.label}-${keyIndex}`}
+                    onPointerDown={pressPointerKey}
+                    onPointerRelease={releasePointerKey}
+                    tone={key.tone}
+                    width={key.width}
+                  >
+                    {key.icon ? (
+                      <>
+                        <key.icon size={11} strokeWidth={2.2} />
+                        {key.label && <span>{key.label}</span>}
+                      </>
+                    ) : key.top ? (
+                      <>
+                        <span>{key.top}</span>
+                        <span>{key.label}</span>
+                      </>
+                    ) : (
+                      key.label || " "
+                    )}
+                  </Key>
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>
@@ -708,9 +739,9 @@ function renderWord(word, input, showCaret = false) {
     const actual = input[i];
     const className =
       actual == null
-        ? "text-muted"
-        : actual === expected
-          ? "text-foreground"
+        ? "text-[#3f3a46]"
+        : charsEqual(actual, expected)
+          ? "text-[#f4eff8]"
           : expected
             ? "text-red-500"
             : "text-red-500/70";
@@ -727,6 +758,24 @@ function renderWord(word, input, showCaret = false) {
   }
 
   return letters;
+}
+
+function charsEqual(actual, expected) {
+  return normalizeChar(actual) === normalizeChar(expected);
+}
+
+function wordsEqual(actual, expected) {
+  if (actual.length !== expected.length) return false;
+  for (let i = 0; i < actual.length; i += 1) {
+    if (!charsEqual(actual[i], expected[i])) return false;
+  }
+  return true;
+}
+
+function normalizeChar(char) {
+  if (char === "’" || char === "‘") return "'";
+  if (char === "“" || char === "”") return '"';
+  return char;
 }
 
 function Caret() {
