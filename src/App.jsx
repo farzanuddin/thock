@@ -402,61 +402,63 @@ export default function App() {
 
   return (
     <main className="flex h-screen flex-col overflow-hidden px-5 py-5">
-      <header className="mx-auto flex w-full max-w-5xl items-center justify-between">
-        <Button
-          className="gap-2 px-0 text-2xl font-bold tracking-[-0.03em] text-primary hover:bg-transparent hover:text-primary"
-          variant="ghost"
-          onClick={() => resetTest()}
-        >
-          thock{" "}
-          <Keyboard size={23} className="rounded bg-surface p-0.5 text-muted" />
-        </Button>
-        <Button
-          className="rounded-full bg-surface px-4 text-sm text-foreground/70 hover:bg-surface/80"
-          variant="ghost"
-          onClick={() => setAudioEnabled((enabled) => !enabled)}
-        >
-          {audioEnabled ? <Volume2 size={17} /> : <VolumeX size={17} />}
-          Audio
-        </Button>
-      </header>
+      <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col justify-center gap-4">
+        <header className="flex w-full shrink-0 items-center justify-between">
+          <Button
+            className="gap-2 px-0 text-2xl font-bold tracking-[-0.03em] text-primary hover:bg-transparent hover:text-primary"
+            variant="ghost"
+            onClick={() => resetTest()}
+          >
+            thock{" "}
+            <Keyboard
+              size={23}
+              className="rounded bg-surface p-0.5 text-muted"
+            />
+          </Button>
+          <Button
+            className="rounded-full bg-surface px-4 text-sm text-foreground/70 hover:bg-surface/80"
+            variant="ghost"
+            onClick={() => setAudioEnabled((enabled) => !enabled)}
+          >
+            {audioEnabled ? <Volume2 size={17} /> : <VolumeX size={17} />}
+            Audio
+          </Button>
+        </header>
 
-      <section
-        className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col justify-start pt-8"
-        onClick={focusInput}
-      >
-        {!finished ? (
-          <TypingSurface
-            author={quote.author}
-            accuracy={accuracy}
-            focused={focused}
-            handleKeyDown={handleKeyDown}
-            inputRef={inputRef}
-            setFocused={setFocused}
-            started={started}
-            timeLeft={timeLeft}
-            typed={typed}
-            wordIndex={wordIndex}
-            wordInputs={wordInputs}
-            words={quote.words}
-            wpm={wpm}
-          />
-        ) : (
-          <Results
-            resultStats={resultStats}
-            resetTest={resetTest}
-            nextTest={nextTest}
+        <section className="flex min-h-0 flex-col" onClick={focusInput}>
+          {!finished ? (
+            <TypingSurface
+              author={quote.author}
+              accuracy={accuracy}
+              focused={focused}
+              handleKeyDown={handleKeyDown}
+              inputRef={inputRef}
+              setFocused={setFocused}
+              started={started}
+              timeLeft={timeLeft}
+              typed={typed}
+              wordIndex={wordIndex}
+              wordInputs={wordInputs}
+              words={quote.words}
+              wpm={wpm}
+            />
+          ) : (
+            <Results
+              resultStats={resultStats}
+              resetTest={resetTest}
+              nextTest={nextTest}
+            />
+          )}
+        </section>
+        {!finished && (
+          <SimpleKeyboard
+            activeKey={activeKey}
+            audioEnabled={audioEnabled}
+            onVirtualKeyDown={handleVirtualKeyDown}
+            onVirtualKeyUp={handleVirtualKeyUp}
           />
         )}
-      </section>
-      {!finished && (
-        <SimpleKeyboard
-          activeKey={activeKey}
-          audioEnabled={audioEnabled}
-          onVirtualKeyDown={handleVirtualKeyDown}
-          onVirtualKeyUp={handleVirtualKeyUp}
-        />
-      )}
+      </div>
     </main>
   );
 }
@@ -746,7 +748,7 @@ function SimpleKeyboard({
 
   return (
     <section
-      className="mx-auto hidden h-[245px] shrink-0 overflow-visible lg:block"
+      className="mx-auto hidden h-[245px] shrink-0 overflow-visible lg:block mb-10"
       aria-hidden="true"
     >
       <div className="origin-top scale-[0.82] rounded-xl border border-[#55515d] bg-[#4a4850] p-3 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
