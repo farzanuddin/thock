@@ -7,6 +7,7 @@ import {
   Command,
   FastForward,
   Frame,
+  Info,
   Keyboard,
   LayoutDashboard,
   Lightbulb,
@@ -126,6 +127,10 @@ export default function App() {
   const [timeLeft, setTimeLeft] = useState(TEST_SECONDS);
   const [startTime, setStartTime] = useState(null);
   const [totalKeystrokes, setTotalKeystrokes] = useState(0);
+  const [accuracyStats, setAccuracyStats] = useState({
+    correct: 0,
+    incorrect: 0,
+  });
   const [focused, setFocused] = useState(false);
   const [activeKey, setActiveKey] = useState(null);
   const [audioEnabled, setAudioEnabled] = useState(true);
@@ -151,6 +156,10 @@ export default function App() {
       ? Math.min(TEST_SECONDS, Math.max((Date.now() - startTime) / 1000, 1))
       : 0;
   const wpm = started ? getWpm(counts.numerator, elapsedSeconds) : 0;
+  const accuracyTotal = accuracyStats.correct + accuracyStats.incorrect;
+  const accuracy = accuracyTotal
+    ? Math.round((accuracyStats.correct / accuracyTotal) * 100)
+    : 100;
 
   const focusInput = useCallback(() => {
     inputRef.current?.focus({ preventScroll: true });
@@ -170,6 +179,7 @@ export default function App() {
       setTimeLeft(TEST_SECONDS);
       setStartTime(null);
       setTotalKeystrokes(0);
+      setAccuracyStats({ correct: 0, incorrect: 0 });
       setActiveKey(null);
       requestAnimationFrame(focusInput);
     },
@@ -199,6 +209,13 @@ export default function App() {
       }
     }, 250);
   }, [finishTest]);
+
+  const recordAccuracyPress = useCallback((isCorrect) => {
+    setAccuracyStats((stats) => ({
+      correct: stats.correct + (isCorrect ? 1 : 0),
+      incorrect: stats.incorrect + (isCorrect ? 0 : 1),
+    }));
+  }, []);
 
   const pressKey = useCallback(
     (code) => {
@@ -272,6 +289,7 @@ export default function App() {
         event.preventDefault();
         if (!typed) return;
         setTotalKeystrokes((count) => count + 1);
+        recordAccuracyPress(wordsEqual(typed, currentWord));
         const nextInputs = [...wordInputs, typed];
         if (wordIndex + 1 >= quote.words.length) {
           setWordInputs(nextInputs);
@@ -286,6 +304,10 @@ export default function App() {
 
       const nextTyped = typed + event.key;
       setTotalKeystrokes((count) => count + 1);
+      recordAccuracyPress(
+        Boolean(currentWord[typed.length]) &&
+          charsEqual(event.key, currentWord[typed.length]),
+      );
       setTyped(nextTyped);
       if (
         wordIndex + 1 >= quote.words.length &&
@@ -299,6 +321,7 @@ export default function App() {
       finished,
       pressKey,
       quote.words,
+      recordAccuracyPress,
       resetTest,
       startTest,
       started,
@@ -306,6 +329,31 @@ export default function App() {
       wordIndex,
       wordInputs,
     ],
+  );
+
+  const handleVirtualKeyDown = useCallback(
+    (code) => {
+      const key = getVirtualKey(code);
+      if (!key) return;
+      handleKeyDown({
+        altKey: false,
+        code,
+        ctrlKey: false,
+        key,
+        metaKey: false,
+        preventDefault: () => {},
+        repeat: false,
+      });
+      focusInput();
+    },
+    [focusInput, handleKeyDown],
+  );
+
+  const handleVirtualKeyUp = useCallback(
+    (code) => {
+      releaseKey(code);
+    },
+    [releaseKey],
   );
 
   useEffect(() => {
@@ -346,11 +394,11 @@ export default function App() {
     return {
       wpm: getWpm(counts.numerator, elapsed),
       raw: getWpm(totalKeystrokes, elapsed),
-      accuracy: counts.accuracy,
-      characters: `${counts.allCorrectChars}/${counts.incorrectChars + counts.extraChars + counts.missedChars}`,
+      accuracy,
+      characters: `${counts.allCorrectChars}/${counts.allCorrectChars + counts.incorrectChars + counts.extraChars + counts.missedChars}`,
       time: `${Math.round(Math.min(elapsed, TEST_SECONDS))}s`,
     };
-  }, [counts, startTime, started, totalKeystrokes]);
+  }, [accuracy, counts, startTime, started, totalKeystrokes]);
 
   return (
     <main className="flex h-screen flex-col overflow-hidden px-5 py-5">
@@ -380,7 +428,7 @@ export default function App() {
         {!finished ? (
           <TypingSurface
             author={quote.author}
-            counts={counts}
+            accuracy={accuracy}
             focused={focused}
             handleKeyDown={handleKeyDown}
             inputRef={inputRef}
@@ -402,7 +450,12 @@ export default function App() {
         )}
       </section>
       {!finished && (
-        <SimpleKeyboard activeKey={activeKey} audioEnabled={audioEnabled} />
+        <SimpleKeyboard
+          activeKey={activeKey}
+          audioEnabled={audioEnabled}
+          onVirtualKeyDown={handleVirtualKeyDown}
+          onVirtualKeyUp={handleVirtualKeyUp}
+        />
       )}
     </main>
   );
@@ -410,7 +463,7 @@ export default function App() {
 
 function TypingSurface({
   author,
-  counts,
+  accuracy,
   focused,
   handleKeyDown,
   inputRef,
@@ -456,7 +509,7 @@ function TypingSurface({
           <>
             <Stat label="s" value={timeLeft} />
             <Stat label="wpm" value={wpm} />
-            <Stat label="% acc" value={counts.accuracy} />
+            <Stat label="% acc" value={accuracy} />
           </>
         )}
       </div>
@@ -506,7 +559,7 @@ function TypingSurface({
                     isPast &&
                       input &&
                       !wordsEqual(input, word) &&
-                      "after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:rounded-full after:bg-red-500/55",
+                      "after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:rounded-full after:bg-primary/60",
                   )}
                   key={`${word}-${index}`}
                   ref={index === wordIndex ? activeWordRef : undefined}
@@ -543,66 +596,153 @@ function Stat({ label, value }) {
 
 function Results({ resultStats, resetTest, nextTest }) {
   return (
-    <div className="mx-auto grid w-full max-w-3xl place-items-center gap-8 text-center">
-      <div>
-        <div className="text-8xl font-bold leading-none text-primary sm:text-9xl">
-          {resultStats.wpm}
+    <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-center gap-12 text-center">
+      <div className="grid w-full max-w-3xl grid-cols-2 items-end gap-10">
+        <div>
+          <div className="text-[8rem] font-black leading-none tracking-[-0.06em] text-primary sm:text-[11rem]">
+            {resultStats.wpm}
+          </div>
+          <div className="mt-6 text-sm font-semibold uppercase tracking-[0.22em] text-muted">
+            WPM
+          </div>
         </div>
-        <div className="mt-2 text-muted">wpm</div>
+        <div>
+          <div className="text-[8rem] font-black leading-none tracking-[-0.06em] text-foreground sm:text-[11rem]">
+            {resultStats.accuracy}
+            <span className="text-muted">%</span>
+          </div>
+          <div className="mt-6 text-sm font-semibold uppercase tracking-[0.22em] text-muted">
+            Accuracy
+          </div>
+        </div>
       </div>
-      <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-4">
-        <ResultCard label="accuracy" value={`${resultStats.accuracy}%`} />
-        <ResultCard label="raw" value={resultStats.raw} />
-        <ResultCard label="time" value={resultStats.time} />
-        <ResultCard label="characters" value={resultStats.characters} />
+
+      <div className="flex items-center gap-16">
+        <Metric label="Raw" value={resultStats.raw} />
+        <div className="h-10 w-px bg-border" />
+        <Metric label="Time" value={resultStats.time} />
+        <div className="h-10 w-px bg-border" />
+        <Metric label="Characters" value={resultStats.characters} />
       </div>
-      <div className="flex gap-3">
-        <Button variant="subtle" onClick={() => resetTest()}>
+
+      <div className="flex items-center gap-4">
+        <FormulaTooltip />
+        <Button
+          className="rounded-full px-5"
+          variant="subtle"
+          onClick={() => resetTest()}
+        >
           restart
         </Button>
-        <Button onClick={nextTest}>next</Button>
+        <Button className="rounded-full px-5" onClick={nextTest}>
+          next
+        </Button>
       </div>
     </div>
   );
 }
 
-function ResultCard({ label, value }) {
+function Metric({ label, value }) {
   return (
-    <div className="rounded-md border border-border bg-surface/65 px-4 py-4 text-muted">
-      <div className="text-xs">{label}</div>
-      <div className="mt-2 text-lg font-bold text-foreground">{value}</div>
+    <div>
+      <div className="text-3xl font-bold text-foreground">{value}</div>
+      <div className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted">
+        {label}
+      </div>
     </div>
   );
 }
 
-function SimpleKeyboard({ activeKey, audioEnabled }) {
+function FormulaTooltip() {
+  return (
+    <div className="group relative">
+      <Button className="rounded-full px-4 text-muted" variant="ghost">
+        <Info size={17} />
+        formula
+      </Button>
+      <div className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-4 w-[34rem] -translate-x-1/2 rounded-lg border border-border bg-[#17151d] p-5 text-left opacity-0 shadow-2xl transition-opacity group-hover:opacity-100">
+        <FormulaSection
+          title="WPM"
+          formula="(correct chars + spaces) / 5 / minutes"
+          description="Only fully correct words and their spaces count. A correct prefix of the current word is included while typing."
+        />
+        <FormulaSection
+          title="Raw"
+          formula="total keystrokes / 5 / minutes"
+          description="Every keystroke counts regardless of accuracy. This measures raw typing speed before mistakes are considered."
+        />
+        <FormulaSection
+          title="Accuracy"
+          formula="correct keypresses / total keypresses × 100"
+          description="Corrections do not erase mistakes from accuracy. Backspace fixes the text, but the original missed keypress still counts."
+          last
+        />
+      </div>
+    </div>
+  );
+}
+
+function FormulaSection({ description, formula, last, title }) {
+  return (
+    <div className={cn(!last && "mb-5 border-b border-border pb-5")}>
+      <div className="mb-2 text-sm font-bold text-foreground">{title}</div>
+      <div className="mb-3 rounded-md bg-surface px-3 py-2 text-sm text-muted">
+        {formula}
+      </div>
+      <p className="text-sm leading-relaxed text-muted">{description}</p>
+    </div>
+  );
+}
+
+function SimpleKeyboard({
+  activeKey,
+  audioEnabled,
+  onVirtualKeyDown,
+  onVirtualKeyUp,
+}) {
   const [pointerKey, setPointerKey] = useState(null);
   const pressedKey = pointerKey ?? activeKey;
 
-  const pressPointerKey = useCallback((event, code) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!code) return;
-    setPointerKey(code);
-    if (audioEnabled) {
-      playKeyboardSound(code, "down", 0.5);
-    }
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    } catch {
-      // Pointer capture is best-effort; the key still works without it.
-    }
-  }, [audioEnabled]);
+  const pressPointerKey = useCallback(
+    (event, code) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!code) return;
+      setPointerKey(code);
+      onVirtualKeyDown(code);
+      if (audioEnabled) {
+        playKeyboardSound(code, "down", 0.5);
+      }
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // Pointer capture is best-effort; the key still works without it.
+      }
+    },
+    [audioEnabled, onVirtualKeyDown],
+  );
 
-  const releasePointerKey = useCallback((event, code) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!code) return;
-    setPointerKey(null);
-    if (audioEnabled) {
-      playKeyboardSound(code, "up", 0.5);
-    }
-  }, [audioEnabled]);
+  const releasePointerKey = useCallback(
+    (event, code) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!code) return;
+      setPointerKey((current) => (current === code ? null : current));
+      onVirtualKeyUp(code);
+    },
+    [onVirtualKeyUp],
+  );
+
+  useEffect(() => {
+    if (!pointerKey) return undefined;
+    const clearPointerKey = () => setPointerKey(null);
+    window.addEventListener("pointerup", clearPointerKey);
+    window.addEventListener("pointercancel", clearPointerKey);
+    return () => {
+      window.removeEventListener("pointerup", clearPointerKey);
+      window.removeEventListener("pointercancel", clearPointerKey);
+    };
+  }, [pointerKey]);
 
   return (
     <section
@@ -728,6 +868,31 @@ function getKeyVariant(tone) {
   };
 }
 
+function getVirtualKey(code) {
+  if (code.startsWith("Key")) return code.slice(3).toLowerCase();
+  if (code.startsWith("Digit")) return code.slice(5);
+
+  const keys = {
+    Backquote: "`",
+    Backspace: "Backspace",
+    Backslash: "\\",
+    BracketLeft: "[",
+    BracketRight: "]",
+    Comma: ",",
+    Enter: "Enter",
+    Equal: "=",
+    Minus: "-",
+    Period: ".",
+    Quote: "'",
+    Semicolon: ";",
+    Slash: "/",
+    Space: " ",
+    Tab: "Tab",
+  };
+
+  return keys[code] ?? null;
+}
+
 function renderWord(word, input, showCaret = false) {
   const letters = [];
   const max = Math.max(word.length, input.length);
@@ -745,8 +910,8 @@ function renderWord(word, input, showCaret = false) {
         : charsEqual(actual, expected)
           ? "text-[#f4eff8]"
           : expected
-            ? "text-red-500"
-            : "text-red-500/70";
+            ? "text-primary"
+            : "text-primary/70";
 
     letters.push(
       <span className={className} key={`${word}-${i}`}>

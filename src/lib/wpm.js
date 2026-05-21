@@ -57,7 +57,7 @@ export function countTyping({
   }
 
   const numerator = correctWordChars + correctSpaces;
-  const accuracyDenominator = allCorrectChars + incorrectChars;
+  const accuracyDenominator = allCorrectChars + incorrectChars + extraChars;
   const accuracy = accuracyDenominator
     ? Math.round((allCorrectChars / accuracyDenominator) * 100)
     : 100;

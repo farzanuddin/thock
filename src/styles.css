@@ -15,7 +15,7 @@
 
   body {
     margin: 0;
-    background: #0d0b12;
+    background: #150f18;
     color: theme("colors.foreground");
     font-family: theme("fontFamily.mono");
   }

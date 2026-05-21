@@ -3,12 +3,12 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: "#0d0b12",
+        background: "#150F18",
         foreground: "#d8d3dd",
         muted: "#6e6877",
         surface: "#18161f",
         border: "#282431",
-        primary: "#ff5a5f",
+        primary: "#F57644",
         key: "#24212d",
       },
       fontFamily: {
