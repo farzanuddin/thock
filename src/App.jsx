@@ -401,7 +401,9 @@ export default function App() {
           />
         )}
       </section>
-      {!finished && <SimpleKeyboard activeKey={activeKey} />}
+      {!finished && (
+        <SimpleKeyboard activeKey={activeKey} audioEnabled={audioEnabled} />
+      )}
     </main>
   );
 }
@@ -449,7 +451,7 @@ function TypingSurface({
         )}
       />
 
-      <div className="mb-5 flex min-h-8 justify-end gap-6 text-muted">
+      <div className="mb-5 flex min-h-8 justify-end gap-6">
         {started && (
           <>
             <Stat label="s" value={timeLeft} />
@@ -520,13 +522,9 @@ function TypingSurface({
 
       <div className="mt-5 grid place-items-center gap-4 text-muted/45">
         <div className="flex items-center gap-3 text-sm text-muted/45">
-          <kbd className="rounded-md bg-surface/20 px-2 py-1 text-surface">
-            tab
-          </kbd>
+          <kbd className="rounded-md bg-surface px-2 py-1">tab</kbd>
           <span>+</span>
-          <kbd className="rounded-md bg-surface/20 px-2 py-1 text-surface">
-            enter
-          </kbd>
+          <kbd className="rounded-md bg-surface px-2 py-1">enter</kbd>
           <span>restart</span>
         </div>
       </div>
@@ -537,7 +535,7 @@ function TypingSurface({
 function Stat({ label, value }) {
   return (
     <span className="tabular-nums">
-      <strong className="font-bold text-surface">{value}</strong>
+      <strong className="font-bold text-primary">{value}</strong>
       <span className="ml-1 text-muted">{label}</span>
     </span>
   );
@@ -577,7 +575,7 @@ function ResultCard({ label, value }) {
   );
 }
 
-function SimpleKeyboard({ activeKey }) {
+function SimpleKeyboard({ activeKey, audioEnabled }) {
   const [pointerKey, setPointerKey] = useState(null);
   const pressedKey = pointerKey ?? activeKey;
 
@@ -586,21 +584,25 @@ function SimpleKeyboard({ activeKey }) {
     event.stopPropagation();
     if (!code) return;
     setPointerKey(code);
-    playKeyboardSound(code, "down", 0.5);
+    if (audioEnabled) {
+      playKeyboardSound(code, "down", 0.5);
+    }
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
     } catch {
       // Pointer capture is best-effort; the key still works without it.
     }
-  }, []);
+  }, [audioEnabled]);
 
   const releasePointerKey = useCallback((event, code) => {
     event.preventDefault();
     event.stopPropagation();
     if (!code) return;
     setPointerKey(null);
-    playKeyboardSound(code, "up", 0.5);
-  }, []);
+    if (audioEnabled) {
+      playKeyboardSound(code, "up", 0.5);
+    }
+  }, [audioEnabled]);
 
   return (
     <section

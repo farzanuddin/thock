@@ -1,4 +1,4 @@
-const SOUND_URL = "/sounds/sound.ogg";
+const SOUND_URL = `${import.meta.env.BASE_URL}sounds/sound.ogg`;
 
 let cachedBuffer = null;
 let fetchPromise = null;
