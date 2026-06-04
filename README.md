@@ -1,27 +1,40 @@
 # Thock
 
-A Vite + React + Tailwind CSS recreation of Keythm focused on one workflow:
-30 seconds of quote typing.
+A mechanical keyboard typing test built with react. 30 seconds and random words - lets go.
 
-Kept:
-- quote-only typing
-- 30 second timer
-- live WPM and accuracy
-- results screen
-- restart and next quote
-- `Tab` then `Enter` restart shortcut
-- simple mechanical keyboard sound and visual keyboard
+[https://farzanuddin.github.io/thock](https://farzanuddin.github.io/thock/)
 
-Removed:
-- themes and dark/light mode
-- ghost mode and FAAH mode
-- punctuation/numbers/easy-hard settings
-- test modes other than 30 second quote mode
-- visit counter
+## Objective
 
-Run it with:
+An attempt to recreate monkeytype but with some inspiration from mechanical keyboards that i have been fascinated with recently. I took the inspiration from a keychron keyboard and saw examples of how it can be recreated. Just a simple typing test that generates words as random when you press a key and uses a few metrics to share about your attempt. 
 
-```bash
-npm install
-npm run dev
-```
+## Features
+
+- **30-second timed test** — starts on first keystroke, stops automatically
+- **Live WPM and accuracy** — updates in real time as you type
+- **Mechanical keyboard sounds** — per-key audio sampled from a single `.ogg`
+  file, played via the Web Audio API
+- **Visual keyboard** — on-screen keyboard highlights each pressed key
+
+## Stack
+
+| Technology                                         | Role                     |
+| -------------------------------------------------- | ------------------------ |
+| [React](https://react.dev/) 19                     | UI framework             |
+| [Vite](https://vitejs.dev/) 7                      | Build tool               |
+| [Tailwind CSS](https://tailwindcss.com/) 3         | Utility-first CSS        |
+| [random-words](https://github.com/punkave/random-words) | Word list generation |
+
+## Getting started
+
+1. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+2. Start the dev server:
+
+   ```bash
+   npm dev
+   ```

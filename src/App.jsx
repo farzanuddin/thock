@@ -14,7 +14,6 @@ import {
   Mic,
   Moon,
   MousePointer2,
-  RotateCcw,
   Search,
   SkipBack,
   SkipForward,
@@ -24,11 +23,11 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "./components/Button";
-import { getQuote } from "./lib/quotes";
+import { getWords } from "./lib/words";
 import { loadKeyboardSound, playKeyboardSound } from "./lib/keyboardSound";
-import { cn } from "./lib/utils";
+import { charsEqual, cn, wordsEqual } from "./lib/utils";
 import { countTyping, getWpm } from "./lib/wpm";
 
 const TEST_SECONDS = 30;
@@ -118,14 +117,12 @@ const KEY_ROWS = [
 ];
 
 export default function App() {
-  const [quote, setQuote] = useState(() => getQuote());
+  const [words, setWords] = useState(() => getWords());
   const [typed, setTyped] = useState("");
   const [wordIndex, setWordIndex] = useState(0);
   const [wordInputs, setWordInputs] = useState([]);
   const [started, setStarted] = useState(false);
   const [finished, setFinished] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(TEST_SECONDS);
-  const [startTime, setStartTime] = useState(null);
   const [totalKeystrokes, setTotalKeystrokes] = useState(0);
   const [accuracyStats, setAccuracyStats] = useState({
     correct: 0,
@@ -134,28 +131,63 @@ export default function App() {
   const [focused, setFocused] = useState(false);
   const [activeKey, setActiveKey] = useState(null);
   const [audioEnabled, setAudioEnabled] = useState(true);
+  const [audioReady, setAudioReady] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
 
   const inputRef = useRef(null);
   const timerRef = useRef(null);
   const tabArmedRef = useRef(false);
+  const tabTimeoutRef = useRef(null);
+
+  // Refs for callback stabilization
+  const typedRef = useRef(typed);
+  const wordIndexRef = useRef(wordIndex);
+  const wordsRef = useRef(words);
+  const startedRef = useRef(started);
+  const finishedRef = useRef(finished);
+  const audioEnabledRef = useRef(audioEnabled);
+
+  // Sync refs with state every render
+  typedRef.current = typed;
+  wordIndexRef.current = wordIndex;
+  wordsRef.current = words;
+  startedRef.current = started;
+  finishedRef.current = finished;
+  audioEnabledRef.current = audioEnabled;
+
+  // Incremental WPM tracking
+  const [committedNumerator, setCommittedNumerator] = useState(0);
 
   const counts = useMemo(
     () =>
-      countTyping({
-        words: quote.words,
-        inputs: wordInputs,
-        typed,
-        wordIndex,
-        final: finished,
-      }),
-    [finished, quote.words, typed, wordIndex, wordInputs],
+      finished
+        ? countTyping({
+            words,
+            inputs: wordInputs,
+            typed,
+            wordIndex,
+            final: true,
+          })
+        : null,
+    [finished, words, typed, wordIndex, wordInputs],
   );
 
-  const elapsedSeconds =
-    started && startTime
-      ? Math.min(TEST_SECONDS, Math.max((Date.now() - startTime) / 1000, 1))
-      : 0;
-  const wpm = started ? getWpm(counts.numerator, elapsedSeconds) : 0;
+  const timeLeft = Math.max(TEST_SECONDS - Math.floor(elapsedMs / 1000), 0);
+  const elapsedSeconds = started
+    ? Math.min(elapsedMs / 1000, TEST_SECONDS)
+    : 0;
+
+  const currentCorrectPrefix = useMemo(() => {
+    if (!started || finished || !typed) return 0;
+    const word = words[wordIndex] || "";
+    for (let i = 0; i < typed.length; i++) {
+      if (!charsEqual(typed[i], word[i])) return 0;
+    }
+    return typed.length;
+  }, [started, finished, typed, wordIndex, words]);
+
+  const wpmNumerator = started ? committedNumerator + currentCorrectPrefix : 0;
+  const wpm = started ? getWpm(wpmNumerator, elapsedSeconds) : 0;
   const accuracyTotal = accuracyStats.correct + accuracyStats.incorrect;
   const accuracy = accuracyTotal
     ? Math.round((accuracyStats.correct / accuracyTotal) * 100)
@@ -166,28 +198,29 @@ export default function App() {
   }, []);
 
   const resetTest = useCallback(
-    (nextQuote = quote) => {
+    (nextWords) => {
       window.clearInterval(timerRef.current);
+      window.clearTimeout(tabTimeoutRef.current);
       timerRef.current = null;
       tabArmedRef.current = false;
-      setQuote(nextQuote);
+      setWords(nextWords || wordsRef.current);
       setTyped("");
       setWordIndex(0);
       setWordInputs([]);
       setStarted(false);
       setFinished(false);
-      setTimeLeft(TEST_SECONDS);
-      setStartTime(null);
       setTotalKeystrokes(0);
       setAccuracyStats({ correct: 0, incorrect: 0 });
+      setCommittedNumerator(0);
+      setElapsedMs(0);
       setActiveKey(null);
       requestAnimationFrame(focusInput);
     },
-    [focusInput, quote],
+    [focusInput],
   );
 
   const nextTest = useCallback(() => {
-    resetTest(getQuote());
+    resetTest(getWords());
   }, [resetTest]);
 
   const finishTest = useCallback(() => {
@@ -199,12 +232,10 @@ export default function App() {
   const startTest = useCallback(() => {
     const now = Date.now();
     setStarted(true);
-    setStartTime(now);
     timerRef.current = window.setInterval(() => {
-      const elapsed = Math.floor((Date.now() - now) / 1000);
-      const remaining = Math.max(TEST_SECONDS - elapsed, 0);
-      setTimeLeft(remaining);
-      if (remaining <= 0) {
+      const elapsed = Date.now() - now;
+      setElapsedMs(elapsed);
+      if (elapsed >= TEST_SECONDS * 1000) {
         finishTest();
       }
     }, 250);
@@ -221,22 +252,22 @@ export default function App() {
     (code) => {
       if (!code) return;
       setActiveKey(code);
-      if (audioEnabled) {
+      if (audioEnabledRef.current) {
         playKeyboardSound(code, "down", 0.5);
       }
     },
-    [audioEnabled],
+    [],
   );
 
   const releaseKey = useCallback(
     (code) => {
       if (!code) return;
       setActiveKey((current) => (current === code ? null : current));
-      if (audioEnabled) {
+      if (audioEnabledRef.current) {
         playKeyboardSound(code, "up", 0.5);
       }
     },
-    [audioEnabled],
+    [],
   );
 
   const handleKeyDown = useCallback(
@@ -245,8 +276,10 @@ export default function App() {
         event.preventDefault();
         tabArmedRef.current = true;
         pressKey(event.code);
-        window.setTimeout(() => {
+        window.clearTimeout(tabTimeoutRef.current);
+        tabTimeoutRef.current = window.setTimeout(() => {
           tabArmedRef.current = false;
+          tabTimeoutRef.current = null;
         }, 1000);
         return;
       }
@@ -257,24 +290,24 @@ export default function App() {
         return;
       }
 
-      if (finished || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (finishedRef.current || event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key.length > 1 && event.key !== "Backspace") return;
 
       if (!event.repeat) {
         pressKey(event.code);
       }
 
-      const currentWord = quote.words[wordIndex] || "";
+      const currentWord = wordsRef.current[wordIndexRef.current] || "";
 
-      if (!started && event.key !== "Backspace") {
+      if (!startedRef.current && event.key !== "Backspace") {
         startTest();
       }
 
       if (event.key === "Backspace") {
         event.preventDefault();
-        if (typed.length > 0) {
+        if (typedRef.current.length > 0) {
           setTyped((value) => value.slice(0, -1));
-        } else if (wordIndex > 0) {
+        } else if (wordIndexRef.current > 0) {
           setWordIndex((index) => index - 1);
           setWordInputs((inputs) => {
             const previousInput = inputs[inputs.length - 1] || "";
@@ -287,48 +320,28 @@ export default function App() {
 
       if (event.key === " ") {
         event.preventDefault();
-        if (!typed) return;
+        if (!typedRef.current) return;
         setTotalKeystrokes((count) => count + 1);
-        recordAccuracyPress(wordsEqual(typed, currentWord));
-        const nextInputs = [...wordInputs, typed];
-        if (wordIndex + 1 >= quote.words.length) {
-          setWordInputs(nextInputs);
-          finishTest();
-          return;
+        const isWordCorrect = wordsEqual(typedRef.current, currentWord);
+        recordAccuracyPress(isWordCorrect);
+        if (isWordCorrect) {
+          setCommittedNumerator((n) => n + currentWord.length + 1);
         }
-        setWordInputs(nextInputs);
+        setWordInputs((prev) => [...prev, typedRef.current]);
         setTyped("");
         setWordIndex((index) => index + 1);
         return;
       }
 
-      const nextTyped = typed + event.key;
+      const nextTyped = typedRef.current + event.key;
       setTotalKeystrokes((count) => count + 1);
       recordAccuracyPress(
-        Boolean(currentWord[typed.length]) &&
-          charsEqual(event.key, currentWord[typed.length]),
+        Boolean(currentWord[typedRef.current.length]) &&
+          charsEqual(event.key, currentWord[typedRef.current.length]),
       );
       setTyped(nextTyped);
-      if (
-        wordIndex + 1 >= quote.words.length &&
-        nextTyped.length >= currentWord.length
-      ) {
-        finishTest();
-      }
     },
-    [
-      finishTest,
-      finished,
-      pressKey,
-      quote.words,
-      recordAccuracyPress,
-      resetTest,
-      startTest,
-      started,
-      typed,
-      wordIndex,
-      wordInputs,
-    ],
+    [pressKey, recordAccuracyPress, resetTest, startTest],
   );
 
   const handleVirtualKeyDown = useCallback(
@@ -358,7 +371,10 @@ export default function App() {
 
   useEffect(() => {
     focusInput();
-    return () => window.clearInterval(timerRef.current);
+    return () => {
+      window.clearInterval(timerRef.current);
+      window.clearTimeout(tabTimeoutRef.current);
+    };
   }, [focusInput]);
 
   useEffect(() => {
@@ -368,7 +384,7 @@ export default function App() {
   }, [focusInput]);
 
   useEffect(() => {
-    void loadKeyboardSound();
+    loadKeyboardSound().then(() => setAudioReady(true));
 
     const handleKeyUp = (event) => {
       releaseKey(event.code);
@@ -387,18 +403,15 @@ export default function App() {
   }, [releaseKey]);
 
   const resultStats = useMemo(() => {
-    const elapsed =
-      started && startTime
-        ? Math.max((Date.now() - startTime) / 1000, 1)
-        : TEST_SECONDS;
+    if (!finished || !counts) return null;
     return {
-      wpm: getWpm(counts.numerator, elapsed),
-      raw: getWpm(totalKeystrokes, elapsed),
+      wpm: getWpm(counts.numerator, elapsedSeconds),
+      raw: getWpm(totalKeystrokes, elapsedSeconds),
       accuracy,
       characters: `${counts.allCorrectChars}/${counts.allCorrectChars + counts.incorrectChars + counts.extraChars + counts.missedChars}`,
-      time: `${Math.round(Math.min(elapsed, TEST_SECONDS))}s`,
+      time: `${Math.round(elapsedSeconds)}s`,
     };
-  }, [accuracy, counts, startTime, started, totalKeystrokes]);
+  }, [accuracy, counts, elapsedSeconds, finished, totalKeystrokes]);
 
   return (
     <main className="flex h-screen flex-col overflow-hidden px-5 py-5">
@@ -419,8 +432,15 @@ export default function App() {
             className="rounded-full bg-surface px-4 text-sm text-foreground/70 hover:bg-surface/80"
             variant="ghost"
             onClick={() => setAudioEnabled((enabled) => !enabled)}
+            disabled={!audioReady}
           >
-            {audioEnabled ? <Volume2 size={17} /> : <VolumeX size={17} />}
+            {!audioReady ? (
+              "loading…"
+            ) : audioEnabled ? (
+              <Volume2 size={17} />
+            ) : (
+              <VolumeX size={17} />
+            )}
             Audio
           </Button>
         </header>
@@ -428,7 +448,6 @@ export default function App() {
         <section className="flex min-h-0 flex-col" onClick={focusInput}>
           {!finished ? (
             <TypingSurface
-              author={quote.author}
               accuracy={accuracy}
               focused={focused}
               handleKeyDown={handleKeyDown}
@@ -439,7 +458,7 @@ export default function App() {
               typed={typed}
               wordIndex={wordIndex}
               wordInputs={wordInputs}
-              words={quote.words}
+              words={words}
               wpm={wpm}
             />
           ) : (
@@ -464,7 +483,6 @@ export default function App() {
 }
 
 function TypingSurface({
-  author,
   accuracy,
   focused,
   handleKeyDown,
@@ -482,20 +500,24 @@ function TypingSurface({
   const wordsContainerRef = useRef(null);
   const [rowOffset, setRowOffset] = useState(0);
 
+  const lineHeightRef = useRef(null);
+
   useEffect(() => {
     if (!(activeWordRef.current && wordsContainerRef.current)) {
       setRowOffset(0);
       return;
     }
 
-    const container = wordsContainerRef.current;
+    if (!lineHeightRef.current) {
+      lineHeightRef.current = Number.parseFloat(
+        window.getComputedStyle(wordsContainerRef.current).lineHeight,
+      );
+    }
+
     const activeWord = activeWordRef.current;
-    const lineHeight = Number.parseFloat(
-      window.getComputedStyle(container).lineHeight,
-    );
-    const row = Math.round(activeWord.offsetTop / lineHeight);
-    setRowOffset(Math.max(0, row - 1) * lineHeight);
-  }, [typed, wordIndex, words]);
+    const row = Math.round(activeWord.offsetTop / lineHeightRef.current);
+    setRowOffset(Math.max(0, row - 1) * lineHeightRef.current);
+  }, [wordIndex]);
 
   return (
     <div className="w-full">
@@ -554,25 +576,37 @@ function TypingSurface({
               const input =
                 index === wordIndex ? typed : wordInputs[index] || "";
               const isPast = index < wordIndex;
+              const isCorrect = input && wordsEqual(input, word);
               return (
                 <span
                   className={cn(
                     "relative mr-4 inline-block whitespace-nowrap",
                     isPast &&
                       input &&
-                      !wordsEqual(input, word) &&
+                      !isCorrect &&
                       "after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:rounded-full after:bg-primary/60",
                   )}
                   key={`${word}-${index}`}
                   ref={index === wordIndex ? activeWordRef : undefined}
                 >
-                  {renderWord(word, input, index === wordIndex && started)}
+                  {isPast ? (
+                    <span
+                      className={
+                        isCorrect ? "text-[#f4eff8]" : "text-primary"
+                      }
+                    >
+                      {word}
+                    </span>
+                  ) : index === wordIndex ? (
+                    renderWord(word, input, started)
+                  ) : (
+                    <span className="text-[#3f3a46]">{word}</span>
+                  )}
                 </span>
               );
             })}
           </div>
         </div>
-        <p className="mt-2 text-center text-sm text-muted/70">- {author}</p>
       </div>
 
       <div className="mt-5 grid place-items-center gap-4 text-muted/45">
@@ -696,7 +730,7 @@ function FormulaSection({ description, formula, last, title }) {
   );
 }
 
-function SimpleKeyboard({
+const SimpleKeyboard = memo(function SimpleKeyboard({
   activeKey,
   audioEnabled,
   onVirtualKeyDown,
@@ -704,6 +738,8 @@ function SimpleKeyboard({
 }) {
   const [pointerKey, setPointerKey] = useState(null);
   const pressedKey = pointerKey ?? activeKey;
+  const audioEnabledRef = useRef(audioEnabled);
+  audioEnabledRef.current = audioEnabled;
 
   const pressPointerKey = useCallback(
     (event, code) => {
@@ -712,7 +748,7 @@ function SimpleKeyboard({
       if (!code) return;
       setPointerKey(code);
       onVirtualKeyDown(code);
-      if (audioEnabled) {
+      if (audioEnabledRef.current) {
         playKeyboardSound(code, "down", 0.5);
       }
       try {
@@ -721,7 +757,7 @@ function SimpleKeyboard({
         // Pointer capture is best-effort; the key still works without it.
       }
     },
-    [audioEnabled, onVirtualKeyDown],
+    [onVirtualKeyDown],
   );
 
   const releasePointerKey = useCallback(
@@ -788,9 +824,9 @@ function SimpleKeyboard({
       </div>
     </section>
   );
-}
+});
 
-function Key({
+const Key = memo(function Key({
   active,
   children,
   code,
@@ -799,7 +835,7 @@ function Key({
   tone,
   width = 50,
 }) {
-  const variant = getKeyVariant(tone);
+  const variant = KEY_VARIANTS[tone] || KEY_VARIANTS.default;
   return (
     <button
       aria-label={typeof children === "string" ? children : undefined}
@@ -846,29 +882,13 @@ function Key({
       </div>
     </button>
   );
-}
+});
 
-function getKeyVariant(tone) {
-  if (tone === "accent") {
-    return {
-      body: "rgba(245, 118, 68, 0.8)",
-      cap: "#F57644",
-      text: "rgba(0,0,0,0.65)",
-    };
-  }
-  if (tone === "dark") {
-    return {
-      body: "rgba(115, 115, 115, 0.8)",
-      cap: "#737373",
-      text: "rgba(255,255,255,0.72)",
-    };
-  }
-  return {
-    body: "rgba(245, 245, 245, 0.8)",
-    cap: "#F5F5F5",
-    text: "rgba(0,0,0,0.7)",
-  };
-}
+const KEY_VARIANTS = {
+  accent: { body: "rgba(245, 118, 68, 0.8)", cap: "#F57644", text: "rgba(0,0,0,0.65)" },
+  dark: { body: "rgba(115, 115, 115, 0.8)", cap: "#737373", text: "rgba(255,255,255,0.72)" },
+  default: { body: "rgba(245, 245, 245, 0.8)", cap: "#F5F5F5", text: "rgba(0,0,0,0.7)" },
+};
 
 function getVirtualKey(code) {
   if (code.startsWith("Key")) return code.slice(3).toLowerCase();
@@ -927,24 +947,6 @@ function renderWord(word, input, showCaret = false) {
   }
 
   return letters;
-}
-
-function charsEqual(actual, expected) {
-  return normalizeChar(actual) === normalizeChar(expected);
-}
-
-function wordsEqual(actual, expected) {
-  if (actual.length !== expected.length) return false;
-  for (let i = 0; i < actual.length; i += 1) {
-    if (!charsEqual(actual[i], expected[i])) return false;
-  }
-  return true;
-}
-
-function normalizeChar(char) {
-  if (char === "’" || char === "‘") return "'";
-  if (char === "“" || char === "”") return '"';
-  return char;
 }
 
 function Caret() {
